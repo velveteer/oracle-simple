@@ -1133,7 +1133,7 @@ getRowCount stmt = do
 
 -- | Column position, starting with 1 for the first column.
 newtype Column = Column {getColumn :: Word32}
-  deriving newtype (Num, Show)
+  deriving newtype (Num, Enum, Show)
 
 foreign import ccall "dpiConn_ping"
   dpiConn_ping
@@ -1165,3 +1165,42 @@ isHealthy (Connection fptr) =
 newtype Only a = Only {fromOnly :: a}
   deriving stock (Eq, Ord, Read, Show, Generic)
   deriving newtype Enum
+
+data DPIQueryInfo =
+  DPIQueryInfo
+  { qiName :: CString
+  , qiNameLength :: CUInt
+  }
+  deriving (Show, Eq, Generic)
+  deriving anyclass (GStorable)
+
+foreign import ccall "dpiStmt_getQueryInfo"
+  dpiStmt_getQueryInfo
+    :: DPIStmt
+    -> CUInt
+    -> Ptr DPIQueryInfo
+    -> IO CInt
+
+-- | Return the query info of the column at the given position for the currently fetched row.
+getQueryInfo
+  :: DPIStmt
+  -- ^ Statement from which column value is to be retrieved
+  -> CUInt
+  -- ^ Column position
+  -> IO DPIQueryInfo
+getQueryInfo stmt pos = do
+  alloca $ \(queryInfoPtr :: Ptr DPIQueryInfo) -> do
+    throwOracleError =<< dpiStmt_getQueryInfo stmt pos queryInfoPtr
+    peek queryInfoPtr
+
+foreign import ccall "dpiStmt_getNumQueryColumns"
+  dpiStmt_getNumQueryColumns
+    :: DPIStmt
+    -> Ptr Word32
+    -> IO CInt
+
+getColumnCount :: DPIStmt -> IO Word32
+getColumnCount stmt = do
+  alloca $ \columnCount -> do
+    throwOracleError =<< dpiStmt_getNumQueryColumns stmt columnCount
+    peek columnCount
